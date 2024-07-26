@@ -1,435 +1,496 @@
-#include<iostream>
+#include <iostream>
 #include <SFML/Graphics.hpp>
+#include <vector>
+#include <stdexcept>
 
 using namespace std;
 
-sf::RenderWindow window(sf::VideoMode(480, 520), "Checkers"); // WINDOW
-
 const int BOARD_SIZE = 8;
-const int SQUARE_SIZE = 60; 
+const int SQUARE_SIZE = 60;
 
+int blue_pieces = 12;
+int red_pieces = 12;
 
-sf::CircleShape Pieces[BOARD_SIZE][BOARD_SIZE]; //DRAWS PIECES
-sf::RectangleShape board[BOARD_SIZE][BOARD_SIZE]; //DRAWS BOARD
-sf::RectangleShape PossibleBoard[BOARD_SIZE][BOARD_SIZE]; //DRAWS HELPER SQUARES
-
-bool selected = false;
-bool RED[BOARD_SIZE][BOARD_SIZE]; //To Decide where to draw a piece for RED
-bool BLUE[BOARD_SIZE][BOARD_SIZE]; //To Decide where to draw a piece for BLUE
-bool POSSIBLE[BOARD_SIZE][BOARD_SIZE]; //To Decide where to draw helper Squares for current team
-
-
-bool turn_RED = true;
-
-
-bool keyPressed = false;
-bool mouseButtonPressed = false;
-
-
-
-pair<int,int> pos; // For saving selected Element
-void drawBoard()
+class Piece
 {
-        // Initialize the board
-        for (int i = 0; i < BOARD_SIZE; ++i) {
-            for (int j = 0; j < BOARD_SIZE; ++j) {
-                // Set the size and position of the square
-                board[i][j].setSize(sf::Vector2f(SQUARE_SIZE, SQUARE_SIZE));
-                board[i][j].setPosition(i * SQUARE_SIZE, j * SQUARE_SIZE);
+private:
+    bool is_red = false;
+    sf::CircleShape shape;
+    bool possible_moves[BOARD_SIZE][BOARD_SIZE] = {false};
+    pair<int,int> position;
 
-                // Alternate the color of the squares
-                if ((i + j) % 2 == 0) {
-                    board[i][j].setFillColor(sf::Color::White);
-                } else {
-                    board[i][j].setFillColor(sf::Color::Black);
-                }
-            }
-        }
-
-        // In your game loop, draw the board
-        for (int i = 0; i < BOARD_SIZE; ++i) {
-            for (int j = 0; j < BOARD_SIZE; ++j) {
-                window.draw(board[i][j]);
-            }
-        }
-
-            // In your game loop, draw the board
-        for (int i = 0; i < BOARD_SIZE; ++i) {
-            for (int j = 0; j < BOARD_SIZE; ++j) {
-                window.draw(Pieces[i][j]);
-                if (POSSIBLE[i][j]) //Trying to draw helper squares here
-                {
-                    sf::RectangleShape Square;
-                    Square.setSize(sf::Vector2f(SQUARE_SIZE, SQUARE_SIZE));
-                    Square.setPosition(SQUARE_SIZE * i, SQUARE_SIZE * j);
-                    sf::Color lightgreen(100, 255, 100, 255 * 0.4);
-                    Square.setFillColor(lightgreen);
-                    window.draw(Square);
-                }
-            }
-        }
-}
-
-void drawPieces()
-{
-    int radius = 28;
-    int pointCount = 100;
-    //clear
-    for (int i = 0; i < BOARD_SIZE; ++i) 
+public:
+    Piece(bool is_red, int x, int y) : is_red(is_red), position(x,y) 
     {
-        for (int j = 0; j < BOARD_SIZE; ++j) 
-        {
-            Pieces[i][j] = sf::CircleShape(); // Assign a new CircleShape with default properties
-        }
+        // Define Piece with sfml methods
+        shape.setRadius(28);
+        shape.setPointCount(100);
+        shape.setFillColor(is_red ? sf::Color::Red : sf::Color::Blue);
+        shape.setPosition(SQUARE_SIZE * x + (SQUARE_SIZE/2 - 28), SQUARE_SIZE * y + (SQUARE_SIZE/2 - 28));
     }
 
-    for (int i = 0; i < BOARD_SIZE; ++i) 
+    void setPosition(int x, int y)
     {
-        for (int j = 0; j < BOARD_SIZE; ++j) 
-        {
-            if (RED[i][j] == true)
-            { 
-                Pieces[i][j].setRadius(radius);
-                Pieces[i][j].setPointCount(pointCount);
-                Pieces[i][j].setPosition(SQUARE_SIZE * i + (SQUARE_SIZE/2 - radius), SQUARE_SIZE * j + (SQUARE_SIZE/2 - radius));
-                Pieces[i][j].setFillColor(sf::Color::Red);
-            }
+        this->position = {x,y};
+        shape.setPosition(x * SQUARE_SIZE + (SQUARE_SIZE / 2 - 28), y * SQUARE_SIZE + (SQUARE_SIZE / 2 - 28));
+    }
 
-            if (BLUE[i][j] == true)
+    pair<int,int> getPosition()
+    {
+        return this->position;
+    }
+
+    bool getIsRed()
+    {
+        return is_red
+;
+    }
+
+    sf::CircleShape getShape()
+    {
+        return this->shape;
+    }
+
+};
+
+
+enum class MoveType {
+    None,   // No move
+    Normal, // Regular move
+    Kill    // Kill move
+};
+
+class Board
+{
+private:
+    sf::RenderWindow& window;
+    sf::RectangleShape board[BOARD_SIZE][BOARD_SIZE];
+    Piece* pieces[BOARD_SIZE][BOARD_SIZE] = {nullptr};
+    MoveType possible_moves[BOARD_SIZE][BOARD_SIZE] = {MoveType::None};
+
+public:
+    Board(sf::RenderWindow& window) : window(window)
+    {
+        for (int x = 0; x < BOARD_SIZE; x++)
+        {
+            for (int y = 0; y < BOARD_SIZE; y++)
             {
-                Pieces[i][j].setRadius(radius);
-                Pieces[i][j].setPointCount(pointCount);
-                Pieces[i][j].setPosition(SQUARE_SIZE * i + (SQUARE_SIZE/2 - radius), SQUARE_SIZE * j + (SQUARE_SIZE/2 - radius));
-                Pieces[i][j].setFillColor(sf::Color::Blue);
+                board[x][y].setSize(sf::Vector2f(SQUARE_SIZE, SQUARE_SIZE));
+                board[x][y].setPosition(x * SQUARE_SIZE, y * SQUARE_SIZE);
+
+                if ((x + y) % 2 == 0) 
+                {
+                    board[x][y].setFillColor(sf::Color::White);
+                } 
+                else 
+                {
+                    board[x][y].setFillColor(sf::Color::Black);
+                }
             }
         }
     }
 
-}
-
-void drawWhoseTurn()
-{
-    sf::Text text;
-    sf::Font font;
-    if (!font.loadFromFile("game_over.ttf")) // replace with path to your font file
+    MoveType getPossibleMoveType(int x, int y)
     {
-        throw runtime_error ("not loaded properly");
-    }
-    text.setPosition(10,465);
-    text.setFont(font);
-    text.setCharacterSize(45);
-
-    if (turn_RED)
-    {
-        text.setString("IT IS REDS TURN");
-        text.setColor(sf::Color::Red);
-    }
-    
-    else
-    {
-        text.setString("IT IS BLUES TURN");
-        text.setColor(sf::Color::Blue);
+        return possible_moves[x][y];
     }
 
-    window.draw(text);
-}
-//i == X Koordinate
-//j == Y Koordinate
-
-void clearHelper()
-{
-    //clear Possible
-    for (int i = 0; i < BOARD_SIZE; ++i) {
-        for (int j = 0; j < BOARD_SIZE; ++j) {
-            POSSIBLE[i][j] = false;
-        }
-    }
-}
-
-bool valid(int& i, int& j, bool red)
-{
-    if (red)
+    void addPiece(int x, int y, Piece* piece) 
     {
-        if (RED[i][j] == false && BLUE[i][j] == false)
-        { 
-            if (pos.first == i && pos.second == j-1) //Infront Move
-                return true;
+        piece->setPosition(x,y);
+        pieces[x][y] = piece;
+    }
 
-            if (pos.first == i-2 && pos.second == j-2) //Diagonal right move
-                if (BLUE[i-1][j-1] == true)
-                {
-                    BLUE[i-1][j-1] = false;
-                    return true;
+    void removePiece(int x, int y)
+    {
+        pieces[x][y] = nullptr;
+    }
+
+    Piece* getPiece(int x, int y)
+    {
+        return pieces[x][y];
+    }
+
+    void movePiece(int prev_x, int prev_y, int x, int y)
+    {
+        Piece* piece = pieces[prev_x][prev_y];
+        removePiece(prev_x,prev_y);
+        addPiece(x,y,piece);
+    }
+
+    void draw()
+    {
+        for (int x = 0; x < BOARD_SIZE; x++)
+        {
+            for (int y = 0; y < BOARD_SIZE; y++)
+            {
+                //draw Board
+                window.draw(board[x][y]);
+
+                //draw possible Moves
+                if (possible_moves[x][y] == MoveType::Normal || possible_moves[x][y] == MoveType::Kill) {
+                    drawPossibleMoves(x,y);
                 }
 
-            if (pos.first == i+2 && pos.second == j-2) //Diagonal left move
-                if (BLUE[i+1][j-1] == true)
-                {
-                    BLUE[i+1][j-1] = false;
-                    return true;
-                }
+                //draw Pieces
+                if (pieces[x][y] != nullptr)
+                    window.draw(pieces[x][y]->getShape());
+            }
         }
+    }
+
+
+    void setPossibleMoves(int x, int y)
+    {
+        setPossibleDiagonalMoves(x,y);
+        setPossibleKillMoves(x,y);
+    }
+
+    void setPossibleDiagonalMoves(int x, int y)
+    {
+        Piece* piece = pieces[x][y]; //check if piece is valid
+        if (!piece) return;
+
+        bool is_red = piece->getIsRed(); //get color
+        int direction = is_red ? -1 : 1;
         
-    }
-    else // Handle blue pieces
-    {
-        if (BLUE[i][j] == false && RED[i][j] == false) // Infront Move
-        { 
-            if (pos.first == i && pos.second == j+1)
-                return true;
+        int offsets[2][2] = {{1, direction}, {-1, direction}}; //set offsets
 
-            if (pos.first == i-2 && pos.second == j+2) // Diagonal right move
-                if (RED[i-1][j+1] == true)
+        for (auto& offset : offsets)
+        {
+            int dx = offset[0];
+            int dy = offset[1];
+            
+            int new_x = x + dx;
+            int new_y = y + dy;
+        
+            //check if move is in bounds
+            if (new_x >= 0 && new_x < BOARD_SIZE && new_y >= 0 && new_y < BOARD_SIZE)
+            {
+                if (pieces[new_x][new_y] == nullptr)
                 {
-                    RED[i-1][j+1] = false;
+                    possible_moves[new_x][new_y] = MoveType::Normal;
+                }
+            }
+        }
+    }
+
+    void setPossibleKillMoves(int x, int y)
+    {
+        
+        Piece* piece = pieces[x][y]; //check if piece is valid
+        if (!piece) return;
+
+        bool is_red = piece->getIsRed(); //get color
+        int offsets[4][2] = {{1, -1}, {-1, -1},{1, 1},{-1, 1}}; //set offsets 
+
+        for (auto& offset : offsets) //check offsets for possible moves
+        {
+            int dx = offset[0];
+            int dy = offset[1];
+            
+            int new_x = x + dx;
+            int new_y = y + dy;
+
+            if (new_x >= 0 && new_x < BOARD_SIZE && new_y >= 0 && new_y < BOARD_SIZE)
+            {
+                Piece* target = pieces[new_x][new_y]; // find target piece
+                if (target && target->getIsRed() != is_red) //check if piece to be captured is of the opposite color
+                {
+                    int capture_x = new_x + dx;
+                    int capture_y = new_y + dy;
+
+                    if (capture_x >= 0 && capture_x < BOARD_SIZE && capture_y >= 0 && capture_y < BOARD_SIZE && pieces[capture_x][capture_y] == nullptr)
+                    {
+                        possible_moves[capture_x][capture_y] = MoveType::Kill;
+                    }
+                }
+            }
+        }
+    }
+
+
+
+    bool isPossibleMove(int x, int y)
+    {
+        return (possible_moves[x][y] == MoveType::Normal || possible_moves[x][y] == MoveType::Kill);
+    }
+
+    void drawPossibleMoves(int x, int y)
+    {
+        sf::RectangleShape highlight(sf::Vector2f(SQUARE_SIZE, SQUARE_SIZE));
+        highlight.setPosition(x * SQUARE_SIZE, y * SQUARE_SIZE);
+        highlight.setFillColor(sf::Color(100, 255, 100, 102));
+        window.draw(highlight);
+    }
+
+    void clearPossibleMoves()
+    {
+        for (int x = 0; x < BOARD_SIZE; x++)
+        {
+            for (int y = 0; y < BOARD_SIZE; y++)
+            {
+                possible_moves[x][y] = MoveType::None;
+            }
+        }
+    }
+
+    bool checkNextKillMove(pair<int,int> piece_pos)
+    {
+        int x = piece_pos.first;
+        int y = piece_pos.second;
+
+        clearPossibleMoves();
+        setPossibleKillMoves(x, y);
+
+        for (int i = 0; i < BOARD_SIZE; i++)
+        {
+            for (int j = 0; j < BOARD_SIZE; j++)
+            {
+                if (possible_moves[i][j] == MoveType::Kill)
+                {
                     return true;
                 }
-
-            if (pos.first == i+2 && pos.second == j+2) // Diagonal left move
-                if (RED[i+1][j+1] == true)
-                {
-                    RED[i+1][j+1] = false;
-                    return true;
-                }
+            }
         }
+
+        return false;
     }
-    
-    cout << "False move" << endl;
-    return false;
-}
+};
 
-
-void playingTime(int& i, int& j)
+class Game
 {
-    std::cout << "SPALTE: " << i << std::endl;
-    std::cout << "ZEILE:  " << j << std::endl;
-    std::cout << "GRID NUMBER: " << j * 8 + i << std::endl;
-    if (turn_RED)
+private:
+    Board board;
+    sf::RenderWindow window;
+    bool red_turn;
+    Piece* selected_piece;
+    sf::Font font;
+    sf::Text turn_text;
+    sf::Text blue_text;
+    sf::Text red_text;
+
+public:
+    Game(): window(sf::VideoMode(480,520), "Checkers"), board(window), red_turn(true), selected_piece{nullptr}
     {
-        if (!selected)
-        {
-            pos = {i, j};
-            if (RED[i][j] == false)
-            {
-                cout << "Invalid Checker chosen RED" << endl;
-            }
-            else
-            {
-                // Here you display helper squares
-                if (j + 1 < BOARD_SIZE)
-                {
-                    if (j + 1 < BOARD_SIZE)
-                    {
-                        if (RED[i][j + 1] == false && BLUE[i][j + 1] == false) // If there is no piece Infrong
-                        {
-                            cout << "Called Infront";
-                            POSSIBLE[i][j + 1] = true;
-                        }
+        initText();
+        initPieces();
+        run();
+    }
 
-                        // KILL Helpers
-                        if (i + 1 < BOARD_SIZE)
-                        {
-                            if (BLUE[i+1][j+1] == true && RED[i+2][j+2] == false && BLUE[i+2][j+2] == false)
-                            {
-                                cout << "Called diagonal right" << endl;
-                                POSSIBLE[i+2][j+2] = true;
-                            }
-                        }
-                        if (i - 1 >= 0)
-                        {
-                            if (BLUE[i-1][j+1] == true && RED[i-2][j+2] == false && BLUE[i-2][j+2] == false)
-                            {
-                                POSSIBLE[i-2][j+2] = true;
-                                cout << "Called diagonal right" << endl;
-                            }
-                        }
-                    }
+private:
 
-                }
-                selected = true;
-            }
+    void initText()
+    {
+        if (!font.loadFromFile("game_over.ttf")) {
+            throw runtime_error("Font not loaded properly");
         }
-        else
+        turn_text.setFont(font);
+        turn_text.setCharacterSize(45);
+        turn_text.setPosition(10, 465);
+
+        blue_text.setFont(font);
+        blue_text.setCharacterSize(35);
+        blue_text.setPosition(360, 460);
+
+        red_text.setFont(font);
+        red_text.setCharacterSize(35);
+        red_text.setPosition(360, 475);
+    }
+
+    void run()
+    {
+        window.setFramerateLimit(60);
+        while(window.isOpen())
         {
-            if (valid(i,j, true))
+            handleClick();
+            updateGame();
+            render();
+        }
+    }
+
+    void initPieces()
+    {
+        for (int x = 0; x < BOARD_SIZE; x++)
+        {
+            for (int y = 0; y < 3; y++)
             {
-                RED[i][j] = true;
-                RED[pos.first][pos.second] = false;
-                turn_RED = false;
-                selected = false;
-                pos = {i, j};
-                clearHelper(); // Update pos after moving the piece
+                if ((x + y) % 2 != 0)
+                {
+                    board.addPiece(x, y, new Piece(false,x,y));
+                }
             }
-            else
+            for (int y = 5; y < BOARD_SIZE; y++)
             {
-                cout << "Invalid Move" << endl;
+                if ((x + y) % 2 != 0)
+                {
+                    board.addPiece(x, y, new Piece(true,x,y));
+                }
             }
         }
     }
-    else
+
+    void handleClick()
     {
-        if (!selected)
-        {
-            pos = {i, j};
-            if (BLUE[i][j] == false)
-            {
-                cout << "Invalid Checker chosen BLUE" << endl;
-            }
-            else
-            {
-                // Here you display helper squares
-                if (j - 1 >= 0)
-                {
-                    if (RED[i][j - 1] == false && BLUE[i][j - 1] == false)
-                    {
-                        POSSIBLE[i][j - 1] = true;
-                    }
-
-
-                    //KILL Move Diagonal Helpers
-                    if (i + 1 < BOARD_SIZE)
-                    {
-                        if (RED[i+1][j-1] == true && BLUE[i+2][j-2] == false && RED[i+2][j-2] == false)
-                        {
-                            cout << "Called diagonal right" << endl;
-                            POSSIBLE[i+2][j-2] = true;
-                        }
-                    }
-                    if (i - 1 >= 0)
-                    {
-                        if (RED[i-1][j-1] == true && BLUE[i-2][j-2] == false && RED[i-2][j-2] == false)
-                        {
-                            POSSIBLE[i-2][j-2] = true;
-                            cout << "Called diagonal right" << endl;
-                        }
-                    }
-                }
-                selected = true;
-            }
-        }
-        else
-        {
-            if (valid(i,j,false))
-            {
-                BLUE[i][j] = true;
-                BLUE[pos.first][pos.second] = false;
-                turn_RED = true;
-                selected = false;
-                pos = {i, j}; // Update pos after moving the piece
-                clearHelper();
-            }
-            else
-            {
-                cout << "Invalid Move" << endl;
-
-            }
-        }
-    }
-}
-
-
-
-
-void WindowMain()
-{
-    window.setFramerateLimit(30);
-    while (window.isOpen())
-    {
-        // check all the window's events that were triggered since the last iteration of the loop
         sf::Event event;
         while (window.pollEvent(event))
         {
-            // "close requested" event: we close the window
             if (event.type == sf::Event::Closed)
+            {
                 window.close();
+            }
 
             if (event.type == sf::Event::MouseButtonPressed)
             {
-                if (event.mouseButton.button == sf::Mouse::Left)
-                {
-                    mouseButtonPressed = true;
-                }
+                cout << endl << "ITS: " << (red_turn ? "REDS TURN" : "BLUES TURN") << endl << endl;
+                if (selected_piece == nullptr) //select Piece
+                    selectPiece(event.mouseButton.x / SQUARE_SIZE, event.mouseButton.y / SQUARE_SIZE);
+
+                else //check if move is valid, if yes, make it
+                    checkMove(event.mouseButton.x / SQUARE_SIZE, event.mouseButton.y / SQUARE_SIZE);
             }
 
-            if (event.type == sf::Event::MouseButtonReleased)
+            if (event.type == sf::Event::KeyPressed && event.key.code == sf::Keyboard::Escape) 
             {
-                if (event.mouseButton.button == sf::Mouse::Left)
-                {
-                    mouseButtonPressed = false;
-                }
+                selected_piece = nullptr;
+                board.clearPossibleMoves();
             }
 
-            if (event.type == sf::Event::KeyPressed)
-            {
-                if (event.key.scancode == sf::Keyboard::Scan::Escape)
-                    keyPressed = true;
-            }
-
-            if (event.type == sf::Event::KeyReleased)
-            {
-                if (event.key.scancode == sf::Keyboard::Scan::Escape)
-                    keyPressed = false;
-            }
         }
-        if (keyPressed)
+    }
+
+    void selectPiece(int x, int y)
+    {
+        board.clearPossibleMoves();
+
+        if (board.getPiece(x,y) == nullptr)
         {
-            selected = false;
-            cout << "TEST" << endl;
-            clearHelper();
+            selected_piece = nullptr;
+            board.clearPossibleMoves();
+            cout << "Empty spot clicked" << endl;
+            return;
         }
-        if (mouseButtonPressed)
+        if (red_turn && board.getPiece(x,y)->getIsRed())
         {
-            int i = sf::Mouse::getPosition(window).x / SQUARE_SIZE;
-            int j = sf::Mouse::getPosition(window).y / SQUARE_SIZE;
-            playingTime(i, j);
-            mouseButtonPressed = false;
+            selected_piece = board.getPiece(x,y);
+            cout << "Red piece Clicked" << endl;
+            board.setPossibleMoves(x,y);
         }
 
-        // clear the window with black color
-        window.clear(sf::Color::Black);
-        drawBoard();
-        drawPieces();
-        drawWhoseTurn();
-        // end the current frame
+        else if (!red_turn && !board.getPiece(x,y)->getIsRed())
+        {
+            selected_piece = board.getPiece(x,y);
+            cout << "Blue piece Clicked" << endl;
+            board.setPossibleMoves(x,y);
+        }
+
+        else
+        {
+            cout << "wrong piece clicked" << endl;
+        }
+    }
+
+    void checkMove(int x, int y)
+    {
+        if (board.isPossibleMove(x,y))
+        {
+            cout << "Valid Move" << endl;
+            makeMove(x,y);
+        }
+        else
+        {
+            board.clearPossibleMoves();
+            cout << "Move to: " << x << " " << y << "not possible" << endl;
+            selected_piece = nullptr;
+        }
+    }
+
+    void makeMove(int x, int y)
+    {
+        pair<int, int> movePosition = {x, y};
+        cout << "Piece moved from: " << selected_piece->getPosition().first << " " << selected_piece->getPosition().second << ", to: " << movePosition.first << " " << movePosition.second << endl;
+
+        Piece* piece = selected_piece;
+        int prev_x = piece->getPosition().first;
+        int prev_y = piece->getPosition().second;
+
+        if (board.getPossibleMoveType(x, y) == MoveType::Normal) // Normal move
+        {
+            board.movePiece(prev_x, prev_y, x, y);
+            board.clearPossibleMoves();
+            red_turn = !red_turn;
+            selected_piece = nullptr;
+        }
+        else if (board.getPossibleMoveType(x, y) == MoveType::Kill) // Capture move
+        {
+
+            int dx = x - prev_x;
+            int dy = y - prev_y;
+
+            int capture_x = prev_x + dx / 2;
+            int capture_y = prev_y + dy / 2;
+            board.getPiece(capture_x,capture_y)->getIsRed() ? --red_pieces : --blue_pieces;
+            board.removePiece(capture_x, capture_y); // Remove captured piece
+            board.movePiece(prev_x, prev_y, x, y);
+            piece->setPosition(x, y); // Update piece's position
+
+            // Check if next kill move is available
+            if (board.checkNextKillMove(piece->getPosition()))
+            {
+                // Allow the same player to continue making captures
+                return;
+            }
+            else
+            {
+                board.clearPossibleMoves();
+                red_turn = !red_turn;
+                selected_piece = nullptr;
+            }
+        }
+    }
+
+    void updateGame()
+    {
+        if (red_turn) 
+        {
+            turn_text.setString("IT IS RED'S TURN");
+            turn_text.setFillColor(sf::Color::Red);
+        } else 
+        {
+            turn_text.setString("IT IS BLUE'S TURN");
+            turn_text.setFillColor(sf::Color::Blue);
+        }
+
+        blue_text.setString(std::to_string(blue_pieces) + " / 12 REMAINING");
+        blue_text.setFillColor(sf::Color::Blue);
+
+        red_text.setString(std::to_string(red_pieces) + " / 12 REMAINING");
+        red_text.setFillColor(sf::Color::Red);
+    }
+
+    void render()
+    {
+        window.clear();
+        board.draw();
+        window.draw(turn_text);
+        window.draw(red_text);
+        window.draw(blue_text);
         window.display();
     }
-}
 
-
-
-
-
+};
 
 int main()
 {
-
-    // Initialize all elements to false
-for(int i = 0; i < BOARD_SIZE; ++i) {
-    for(int j = 0; j < BOARD_SIZE; ++j) {
-        RED[j][i] = false;
-        BLUE[j][i] = false;
-        POSSIBLE[j][i] = false;
-    }
-}
-
-// Set the first two columns to true
-for(int i = 0; i < 3; ++i) {
-    for(int j = 0; j < BOARD_SIZE; ++j) {
-        if ((i+j) % 2 == 0)
-            RED[j][i] = true;
-    }
-}
-
-// Set the last two columns to true
-for(int i = BOARD_SIZE - 3; i < BOARD_SIZE; ++i) {
-    for(int j = 0; j < BOARD_SIZE; ++j) 
+    try
     {
-        cout<<"Called";
-        if ((i+j) % 2 == 0)
-        BLUE[j][i] = true;
+        Game game;
     }
-}
-
-    WindowMain();
+    catch (const exception& err)
+    {
+        cerr << err.what() << endl;
+        return 1;
+    }
     return 0;
+    
 }
